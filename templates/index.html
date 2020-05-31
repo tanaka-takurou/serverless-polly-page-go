@@ -1,0 +1,39 @@
+{{define "base"}}
+<!doctype html>
+<html>
+  <head>
+{{template "headtag" .}}
+  </head>
+  <body>
+    <div id="info" class="ui hidden info message">
+      <i class="close icon"></i>
+      <div class="header">
+        Success. Please play.
+      </div>
+    </div>
+    <h1 class="ui center aligned header">Polly</h1>
+    <div class="main ui container">
+      <form class="ui segment" method="POST">
+        <div class="content">
+          <div class="ui form">
+            <div class="field">
+              <label>Message</label>
+              <div class="ui input">
+                <textarea id="message" name="message" rows="3"></textarea>
+              </div>
+            </div>
+            <div class="field">
+              <div id="submit" class="ui green button" onclick="SubmitForm();">Send</div>
+            </div>
+          </div>
+        </div>
+        <input id="action" type="hidden" name="action" value="synthesizespeech">
+      </form>
+    </div>
+    <div id="warning" class="ui hidden warning message"></div>
+    <div class="ui container">
+      <audio id="result" controls src=""></audio>
+    </div>
+  </body>
+</html>
+{{end}}
