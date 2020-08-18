@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"os"
 	"fmt"
 	"log"
 	"time"
@@ -24,10 +25,7 @@ type Response events.APIGatewayProxyResponse
 
 const layout       string = "2006-01-02 15:04"
 const layout2      string = "20060102150405"
-const languageCode string = "ja-JP"
 const outputFormat string = "mp3"
-const bucketName   string = "your-bucket-name"
-const bucketRegion string = "ap-northeast-1"
 
 func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (Response, error) {
 	var jsonBytes []byte
@@ -65,15 +63,14 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 func synthesizeSpeech(message string)(string, error) {
 	t := time.Now()
 	svc := polly.New(session.New(), &aws.Config{
-		Region: aws.String("ap-northeast-1"),
+		Region: aws.String(os.Getenv("REGION")),
 	})
 
-	voiceId := "Takumi"
 	input := &polly.SynthesizeSpeechInput{
 		Text:         aws.String(message),
 		TextType:     aws.String("text"),
-		VoiceId:      aws.String(voiceId),
-		LanguageCode: aws.String(languageCode),
+		VoiceId:      aws.String(os.Getenv("VOICE_ID")),
+		LanguageCode: aws.String(os.Getenv("LANGUAGE_CODE")),
 		OutputFormat: aws.String(outputFormat),
 	}
 	res, err := svc.SynthesizeSpeech(input)
@@ -86,12 +83,12 @@ func synthesizeSpeech(message string)(string, error) {
 	contentType := "audio/mp3"
 	filename := t.Format(layout2) + ".mp3"
 	sess, _ := session.NewSession(&aws.Config{
-		Region: aws.String(bucketRegion)},
+		Region: aws.String(os.Getenv("REGION"))},
 	)
 	uploader := s3manager.NewUploader(sess)
 	_, err = uploader.Upload(&s3manager.UploadInput{
 		ACL: aws.String("public-read"),
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(os.Getenv("BUCKET_NAME")),
 		Key: aws.String(filename),
 		Body: bytes.NewReader(data),
 		ContentType: aws.String(contentType),
@@ -100,7 +97,7 @@ func synthesizeSpeech(message string)(string, error) {
 		log.Print(err)
 		return "", err
 	}
-	url := "https://" + bucketName + ".s3-" + bucketRegion + ".amazonaws.com/" + filename
+	url := "https://" + os.Getenv("BUCKET_NAME") + ".s3-" + os.Getenv("REGION") + ".amazonaws.com/" + filename
 	return url, nil
 }
 
