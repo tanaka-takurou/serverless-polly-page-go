@@ -9,12 +9,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/polly"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/external"
+	"github.com/aws/aws-sdk-go-v2/service/polly"
+	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type APIResponse struct {
@@ -23,9 +25,11 @@ type APIResponse struct {
 
 type Response events.APIGatewayProxyResponse
 
-const layout       string = "2006-01-02 15:04"
-const layout2      string = "20060102150405"
-const outputFormat string = "mp3"
+var cfg aws.Config
+var pollyClient *polly.Client
+
+const layout  string = "2006-01-02 15:04"
+const layout2 string = "20060102150405"
 
 func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (Response, error) {
 	var jsonBytes []byte
@@ -36,7 +40,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		switch v {
 		case "synthesizespeech" :
 			if m, ok := d["message"]; ok {
-				url, e := synthesizeSpeech(m)
+				url, e := synthesizeSpeech(ctx, m)
 				if e != nil {
 					err = e
 				} else {
@@ -60,45 +64,51 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	}, nil
 }
 
-func synthesizeSpeech(message string)(string, error) {
+func synthesizeSpeech(ctx context.Context, message string)(string, error) {
 	t := time.Now()
-	svc := polly.New(session.New(), &aws.Config{
-		Region: aws.String(os.Getenv("REGION")),
-	})
+	if pollyClient == nil {
+		pollyClient = polly.New(cfg)
+	}
 
 	input := &polly.SynthesizeSpeechInput{
 		Text:         aws.String(message),
-		TextType:     aws.String("text"),
-		VoiceId:      aws.String(os.Getenv("VOICE_ID")),
-		LanguageCode: aws.String(os.Getenv("LANGUAGE_CODE")),
-		OutputFormat: aws.String(outputFormat),
+		TextType:     polly.TextTypeText,
+		VoiceId:      polly.VoiceIdTakumi,
+		LanguageCode: polly.LanguageCodeJaJp,
+		OutputFormat: polly.OutputFormatMp3,
 	}
-	res, err := svc.SynthesizeSpeech(input)
+	req := pollyClient.SynthesizeSpeechRequest(input)
+	res, err := req.Send(ctx)
 	if err != nil {
 		return "", err
 	}
 	buf := new(bytes.Buffer)
-	io.Copy(buf, res.AudioStream)
+	io.Copy(buf, res.SynthesizeSpeechOutput.AudioStream)
 	data := buf.Bytes()
 	contentType := "audio/mp3"
 	filename := t.Format(layout2) + ".mp3"
-	sess, _ := session.NewSession(&aws.Config{
-		Region: aws.String(os.Getenv("REGION"))},
-	)
-	uploader := s3manager.NewUploader(sess)
+	uploader := s3manager.NewUploader(cfg)
 	_, err = uploader.Upload(&s3manager.UploadInput{
-		ACL: aws.String("public-read"),
+		ACL: s3.ObjectCannedACLPublicRead,
 		Bucket: aws.String(os.Getenv("BUCKET_NAME")),
 		Key: aws.String(filename),
 		Body: bytes.NewReader(data),
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
-		log.Print(err)
 		return "", err
 	}
 	url := "https://" + os.Getenv("BUCKET_NAME") + ".s3-" + os.Getenv("REGION") + ".amazonaws.com/" + filename
 	return url, nil
+}
+
+func init() {
+	var err error
+	cfg, err = external.LoadDefaultAWSConfig()
+	cfg.Region = os.Getenv("REGION")
+	if err != nil {
+		log.Print(err)
+	}
 }
 
 func main() {
