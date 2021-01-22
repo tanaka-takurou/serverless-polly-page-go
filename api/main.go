@@ -68,7 +68,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 func synthesizeSpeech(ctx context.Context, message string)(string, error) {
 	t := time.Now()
 	if pollyClient == nil {
-		pollyClient = getPollyClient()
+		pollyClient = getPollyClient(ctx)
 	}
 
 	input := &polly.SynthesizeSpeechInput{
@@ -88,7 +88,7 @@ func synthesizeSpeech(ctx context.Context, message string)(string, error) {
 	contentType := "audio/mp3"
 	filename := t.Format(layout2) + ".mp3"
 	if s3Client == nil {
-		s3Client = getS3Client()
+		s3Client = getS3Client(ctx)
 	}
 	input_ := &s3.PutObjectInput{
 		ACL: stypes.ObjectCannedACLPublicRead,
@@ -105,16 +105,16 @@ func synthesizeSpeech(ctx context.Context, message string)(string, error) {
 	return url, nil
 }
 
-func getPollyClient() *polly.Client {
-	return polly.NewFromConfig(getConfig())
+func getPollyClient(ctx context.Context) *polly.Client {
+	return polly.NewFromConfig(getConfig(ctx))
 }
 
-func getS3Client() *s3.Client {
-	return s3.NewFromConfig(getConfig())
+func getS3Client(ctx context.Context) *s3.Client {
+	return s3.NewFromConfig(getConfig(ctx))
 }
 
-func getConfig() aws.Config {
-	cfg, err := config.LoadDefaultConfig()
+func getConfig(ctx context.Context) aws.Config {
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Print(err)
 	}
